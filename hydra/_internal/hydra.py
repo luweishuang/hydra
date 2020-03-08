@@ -57,6 +57,7 @@ class Hydra:
         config_search_path: ConfigSearchPath,
         strict: Optional[bool],
     ) -> "Hydra":
+
         config_loader: ConfigLoader = ConfigLoaderImpl(
             config_search_path=config_search_path, default_strict=strict
         )

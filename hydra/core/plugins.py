@@ -3,16 +3,19 @@ import importlib
 import inspect
 import pkgutil
 import warnings
-from typing import Any, List, Optional, Type
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Type
 
 from omegaconf import DictConfig
 
 from hydra._internal.sources_registry import SourcesRegistry
 from hydra.conf import PluginConf
 from hydra.core.config_loader import ConfigLoader
+from hydra.plugins.completion_plugin import CompletionPlugin
 from hydra.plugins.config_source import ConfigSource
 from hydra.plugins.launcher import Launcher
 from hydra.plugins.plugin import Plugin
+from hydra.plugins.search_path_plugin import SearchPathPlugin
 from hydra.plugins.sweeper import Sweeper
 from hydra.types import TaskFunction
 
@@ -20,6 +23,25 @@ from hydra.types import TaskFunction
 class Plugins:
     def __init__(self) -> None:
         raise NotImplementedError("Plugins is a static class, do not instantiate")
+
+    plugins_map: Dict[Type[Plugin], List[Type[Plugin]]]
+
+    @staticmethod
+    def initialize():
+
+        top_level: List[Any] = []
+        core_plugins = importlib.import_module("hydra._internal.core_plugins")
+        top_level.append(core_plugins)
+
+        try:
+            hydra_plugins = importlib.import_module("hydra_plugins")
+            top_level.append(hydra_plugins)
+        except ImportError:
+            # If no plugins are installed the hydra_plugins package does not exist.
+            pass
+
+        plugins_map = Plugins._scan_all_plugins(modules=top_level)
+        pass
 
     @staticmethod
     def _instantiate(config: PluginConf) -> Plugin:
@@ -83,6 +105,45 @@ class Plugins:
             config=config, config_loader=config_loader, task_function=task_function
         )
         return launcher
+
+    @staticmethod
+    def _scan_all_plugins(modules: List[Any]) -> Dict[Type[Plugin], List[Type[Plugin]]]:
+        ret: Dict[Type[Plugin], List[Type[Plugin]]] = defaultdict(default_factory=list)
+
+        for mdl in modules:
+            for importer, modname, ispkg in pkgutil.walk_packages(
+                path=mdl.__path__, prefix=mdl.__name__ + ".", onerror=lambda x: None
+            ):
+                try:
+                    m = importer.find_module(modname)
+                    loaded_mod = m.load_module(modname)
+                except ImportError as e:
+                    warnings.warn(
+                        message=f"\n"
+                        f"\tError importing '{modname}'.\n"
+                        f"\tPlugin is incompatible with this Hydra version or buggy.\n"
+                        f"\tRecommended to uninstall or upgrade plugin.\n"
+                        f"\t\t{type(e).__name__} : {e}",
+                        category=UserWarning,
+                    )
+                    loaded_mod = None
+
+                plugin_types = [
+                    ConfigSource,
+                    CompletionPlugin,
+                    Launcher,
+                    Sweeper,
+                    SearchPathPlugin,
+                ]
+
+                if loaded_mod is not None:
+                    for name, obj in inspect.getmembers(loaded_mod):
+                        for plugin_type in plugin_types:
+                            if inspect.isclass(obj):
+                                if issubclass(obj, plugin_type):
+                                    assert issubclass(obj, Plugin)
+                                    ret[plugin_type] = obj
+        return ret
 
     @staticmethod
     def _get_all_subclasses_in(

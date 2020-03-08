@@ -8,6 +8,7 @@ from typing import Any, List, Optional, Sequence, Tuple
 
 from hydra._internal.config_search_path_impl import ConfigSearchPathImpl
 from hydra.core.config_search_path import ConfigSearchPath
+from hydra.core.plugins import Plugins
 from hydra.core.utils import get_valid_filename, split_config_path
 from hydra.types import TaskFunction
 
@@ -156,9 +157,12 @@ def run_hydra(
     config_name: Optional[str],
     strict: Optional[bool],
 ) -> None:
+
     from hydra.core.global_hydra import GlobalHydra
 
     from .hydra import Hydra
+
+    Plugins.initialize()
 
     calling_file, calling_module = detect_calling_file_or_module(3)
     config_dir, config_name = split_config_path(config_path, config_name)
