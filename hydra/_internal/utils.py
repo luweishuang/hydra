@@ -8,7 +8,6 @@ from typing import Any, List, Optional, Sequence, Tuple
 
 from hydra._internal.config_search_path_impl import ConfigSearchPathImpl
 from hydra.core.config_search_path import ConfigSearchPath
-from hydra.core.plugins import Plugins
 from hydra.core.utils import get_valid_filename, split_config_path
 from hydra.types import TaskFunction
 
@@ -132,14 +131,14 @@ def create_config_search_path(search_path_dir: Optional[str]) -> ConfigSearchPat
     from hydra.core.plugins import Plugins
     from hydra.plugins.search_path_plugin import SearchPathPlugin
 
-    Plugins.register_config_sources()
+    Plugins.instance().initialize()
     search_path = ConfigSearchPathImpl()
     search_path.append("hydra", "pkg://hydra.conf")
 
     if search_path_dir is not None:
         search_path.append("main", search_path_dir)
 
-    search_path_plugins = Plugins.discover(SearchPathPlugin)
+    search_path_plugins = Plugins.instance().discover(SearchPathPlugin)
     for spp in search_path_plugins:
         plugin = spp()
         assert isinstance(plugin, SearchPathPlugin)
@@ -161,8 +160,6 @@ def run_hydra(
     from hydra.core.global_hydra import GlobalHydra
 
     from .hydra import Hydra
-
-    Plugins.initialize()
 
     calling_file, calling_module = detect_calling_file_or_module(3)
     config_dir, config_name = split_config_path(config_path, config_name)
